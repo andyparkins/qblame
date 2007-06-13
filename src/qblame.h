@@ -63,6 +63,32 @@
 // -------------- Class declarations
 
 //
+// Class:	TEvent
+// Description:
+//
+class TEvent
+{
+  public:
+	QString Mail;
+	time_t Time;
+	QString TimeZone;
+};
+
+//
+// Class:	TBlame
+// Description:
+//
+class TBlame
+{
+  public:
+	QString Line;
+	QString Hash;
+	TEvent Author;
+	TEvent Commiter;
+
+};
+
+//
 // Class:	TBlameWindow
 // Description:
 //
@@ -85,10 +111,15 @@ class TBlameWindow : public QWidget, public Ui::QBlame
 
   protected:
 	enum eParseState {
-
-	};
+		BEGIN,
+		MIDDLE,
+		END,
+	} ParseState;
 
 	QProcess *gitBlame;
+
+	QMap<unsigned int,TBlameInfo> Lines;
+	QList<TBlame*> Blames;
 };
 
 // -------------- Function prototypes
