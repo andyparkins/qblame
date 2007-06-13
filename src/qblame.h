@@ -81,8 +81,13 @@ class TBlameWindow : public QWidget, public Ui::QBlame
 
   protected:
 	void preloadFile( const QString & );
+	void parseLine( const QString & );
 
   protected:
+	enum eParseState {
+
+	};
+
 	QProcess *gitBlame;
 };
 

@@ -88,14 +88,30 @@ void TBlameWindow::preloadFile( const QString &File )
 void TBlameWindow::readMore()
 {
 	QByteArray ba;
+	QString x;
 
 	do {
 		ba = gitBlame->readLine();
-		listBlame->addItem( ba );
+		x = ba;
 
-		cerr << "RX: " << ba.data();
+		// There is always a newline at the end, so remove it
+		x.chop(1);
+		parseLine(x);
 	} while( ba.size() > 0 );
 
+}
+
+//
+// Function:	TBlameWindow :: parseLine
+// Description:
+//
+void TBlameWindow::parseLine( const QString &l )
+{
+	QString L = l;
+
+	listBlame->addItem( L );
+
+	cerr << "RX: " << qPrintable(L);
 }
 
 //
