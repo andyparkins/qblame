@@ -81,12 +81,28 @@ class TEvent
 class TBlame
 {
   public:
-	QString Line;
 	QString Hash;
+	unsigned int SourceLine;
+	unsigned int ResultLine;
 	TEvent Author;
 	TEvent Commiter;
-
+	QString Summary;
+	QString Filename;
 };
+
+//
+// Class:	TBlameLine
+// Description:
+//
+class TBlameLine
+{
+  public:
+	TBlameLine() : Line(0), Blame(NULL) {}
+	TBlameLine( unsigned int l, TBlame *b ) : Line(l), Blame(b) {}
+
+	unsigned int Line;
+	TBlame *Blame;
+}
 
 //
 // Class:	TBlameWindow
@@ -118,8 +134,8 @@ class TBlameWindow : public QWidget, public Ui::QBlame
 
 	QProcess *gitBlame;
 
-	QMap<unsigned int,TBlameInfo> Lines;
-	QList<TBlame*> Blames;
+	QMap<unsigned int,TBlameLine> Lines;
+	QMap<QString,TBlame*> Blames;
 };
 
 // -------------- Function prototypes
