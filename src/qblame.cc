@@ -22,6 +22,7 @@
 #include <iostream>
 // --- Qt
 #include <QApplication>
+#include <QShowEvent>
 // --- OS
 #include <signal.h>
 // --- Project libs
@@ -43,8 +44,10 @@
 // Function:	TBlameWindow :: TBlameWindow
 // Description:
 //
-TBlameWindow::TBlameWindow( const QString &File, QWidget *p ) :
-	QWidget( p )
+TBlameWindow::TBlameWindow( const QString &file, QWidget *p ) :
+	QWidget( p ),
+	ParseState( NEW_BLOCK ),
+	File( file )
 {
 	setupUi( this );
 
@@ -56,12 +59,6 @@ TBlameWindow::TBlameWindow( const QString &File, QWidget *p ) :
 	connect( gitBlame, SIGNAL( finished( int, QProcess::ExitStatus ) ),
 			this, SLOT( announceFinished( int, QProcess::ExitStatus ) ) );
 
-	preloadFile( File );
-
-	gitBlame->start( "git-blame", QStringList()
-			<< "--incremental"
-			<< File
-			);
 }
 
 //
@@ -74,10 +71,27 @@ TBlameWindow::~TBlameWindow()
 }
 
 //
+// Function:	TBlameWindow :: showEvent
+// Description:
+//
+void TBlameWindow::showEvent( QShowEvent *event )
+{
+	if( event->spontaneous() )
+		return;
+
+	preloadFile();
+
+	gitBlame->start( "git-blame", QStringList()
+			<< "--incremental"
+			<< File
+			);
+}
+
+//
 // Function:	TBlameWindow :: preloadFile
 // Description:
 //
-void TBlameWindow::preloadFile( const QString &File )
+void TBlameWindow::preloadFile()
 {
 }
 
@@ -105,13 +119,88 @@ void TBlameWindow::readMore()
 // Function:	TBlameWindow :: parseLine
 // Description:
 //
-void TBlameWindow::parseLine( const QString &l )
+void TBlameWindow::parseLine( const QString &line )
 {
-	QString L = l;
+	QStringList Field = line.split( ' ' );
 
-	listBlame->addItem( L );
+	unsigned int SourceLine, ResultLine, NumLines;
+	QString Hash;
+	QString Key, Value;
 
-	cerr << "RX: " << qPrintable(L);
+	switch( ParseState ) {
+		case NEW_BLOCK:
+			// Incomplete (probably at end of file)
+			if( Field.size() < 4 )
+				break;
+
+			// <40-byte hex sha1> <sourceline> <resultline> <num_lines>
+			Hash = Field[0];
+			SourceLine = Field[1].toUInt();
+			ResultLine = Field[2].toUInt();
+			NumLines = Field[3].toUInt();
+
+			if( !Commits.contains( Hash ) ) {
+				CurrentMeta = new TCommitMeta;
+				CurrentMeta->Hash = Field[0];
+				// Create a new record for this commit
+				Commits[Hash] = CurrentMeta;
+			} else {
+				CurrentMeta = Commits[Hash];
+			}
+
+			// Populate the line map for the target lines to point at
+			// the incoming meta.  Note, it's perfectly acceptable to
+			// overwrite a previous value because this is an incremental
+			// blame and gets more and more accurate
+			for( unsigned int i = 0; i < NumLines; i++ ) {
+				Lines[ResultLine + i] = CurrentMeta;
+			}
+
+			cerr << "New block: " << qPrintable(CurrentMeta->Hash) << endl;
+
+			ParseState = IN_BLOCK;
+			break;
+
+		case IN_BLOCK:
+			// Incomplete (premature end of file - probably an error)
+			if( Field.size() == 0 )
+				break;
+
+			Key = Field.takeFirst();
+			Value = Field.join(" ");
+
+			if( Key == "author" )
+				CurrentMeta->Author.Name = Value;
+			else if( Key == "author-mail" )
+				CurrentMeta->Author.Mail = Value;
+			else if( Key == "author-time" )
+				CurrentMeta->Author.Time = Value.toInt();
+			else if( Key == "author-tz" )
+				CurrentMeta->Author.TimeZone = Value;
+			else if( Key == "committer" )
+				CurrentMeta->Committer.Name = Value;
+			else if( Key == "committer-mail" )
+				CurrentMeta->Committer.Mail = Value;
+			else if( Key == "committer-time" )
+				CurrentMeta->Committer.Time = Value.toInt();
+			else if( Key == "committer-tz" )
+				CurrentMeta->Committer.TimeZone = Value;
+			else if( Key == "summary" )
+				CurrentMeta->Summary = Value;
+			else if( Key == "boundary" )
+				CurrentMeta->Boundary = true;
+			else if( Key == "filename" ) {
+				CurrentMeta->Filename = Value;
+				CurrentMeta = NULL;
+				ParseState = NEW_BLOCK;
+			} else {
+				cerr << "Unknown key in blame block: "
+					<< qPrintable(Key) << " = " 
+					<< qPrintable(Value) << endl;
+			}
+			break;
+	}
+
 }
 
 //
@@ -130,6 +219,10 @@ void TBlameWindow::announceStarted()
 void TBlameWindow::announceFinished( int ExitCode, QProcess::ExitStatus )
 {
 	cerr << "PROCESS: Finished with exit code " << ExitCode << endl;
+
+	foreach( TCommitMeta *Meta, Lines ) {
+		cerr << qPrintable( Meta->Hash ) << " " << qPrintable( Meta->Summary ) << endl;
+	}
 }
 
 

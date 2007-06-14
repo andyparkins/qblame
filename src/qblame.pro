@@ -18,6 +18,7 @@ TEMPLATE = app
 TARGET = 
 DEPENDPATH += .
 INCLUDEPATH += .
+CONFIG += warn_on debug
 
 # --- Input
 HEADERS += qblame.h
@@ -37,7 +38,7 @@ build.depends = ./$(TARGET)
 
 # Run
 unix {
-	run.commands = rm -f core*; ./$(TARGET) qblame.pro > debug.out
+	run.commands = rm -f core*; ./$(TARGET) qblame.h > debug.out
 }
 run.depends = ./$(TARGET)
 

@@ -58,6 +58,7 @@
 
 
 // -------------- Class pre-declarations
+class QShowEvent;
 
 
 // -------------- Class declarations
@@ -69,40 +70,26 @@
 class TEvent
 {
   public:
+	QString Name;
 	QString Mail;
 	time_t Time;
 	QString TimeZone;
 };
 
 //
-// Class:	TBlame
+// Class:	TCommitMeta
 // Description:
 //
-class TBlame
+class TCommitMeta
 {
   public:
 	QString Hash;
-	unsigned int SourceLine;
-	unsigned int ResultLine;
 	TEvent Author;
-	TEvent Commiter;
+	TEvent Committer;
 	QString Summary;
 	QString Filename;
+	bool Boundary;
 };
-
-//
-// Class:	TBlameLine
-// Description:
-//
-class TBlameLine
-{
-  public:
-	TBlameLine() : Line(0), Blame(NULL) {}
-	TBlameLine( unsigned int l, TBlame *b ) : Line(l), Blame(b) {}
-
-	unsigned int Line;
-	TBlame *Blame;
-}
 
 //
 // Class:	TBlameWindow
@@ -122,20 +109,23 @@ class TBlameWindow : public QWidget, public Ui::QBlame
 	void announceFinished( int, QProcess::ExitStatus );
 
   protected:
-	void preloadFile( const QString & );
+	void showEvent( QShowEvent * );
+
+	void preloadFile();
 	void parseLine( const QString & );
 
   protected:
 	enum eParseState {
-		BEGIN,
-		MIDDLE,
-		END,
+		NEW_BLOCK,
+		IN_BLOCK
 	} ParseState;
+	QString File;
 
 	QProcess *gitBlame;
 
-	QMap<unsigned int,TBlameLine> Lines;
-	QMap<QString,TBlame*> Blames;
+	QMap<unsigned int,TCommitMeta*> Lines;
+	QMap<QString,TCommitMeta*> Commits;
+	TCommitMeta *CurrentMeta;
 };
 
 // -------------- Function prototypes
