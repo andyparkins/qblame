@@ -22,6 +22,7 @@
 // --- C++
 // --- Qt
 #include <QProcess>
+#include <QAbstractItemModel>
 // --- OS
 // --- Project lib
 // --- Project
@@ -92,6 +93,74 @@ class TCommitMeta
 };
 
 //
+// Class:	TBlameLine
+// Description:
+//
+class TBlameLine
+{
+  public:
+	unsigned int SourceLine;
+	TCommitMeta *Commit;
+	QString data;
+};
+
+//
+// Class:	TBlameModel
+// Description:
+//
+class TBlameModel : public QAbstractItemModel
+{
+  Q_OBJECT
+
+  public:
+	TBlameModel( const QString &, QWidget * = NULL );
+	~TBlameModel();
+
+	void init();
+
+	// --- QAbstractItemModel overrides
+	QVariant data( const QModelIndex &index, int role ) const;
+//	Qt::ItemFlags flags( const QModelIndex &index ) const;
+//	QVariant headerData( int section, Qt::Orientation orientation,
+//			int role = Qt::DisplayRole ) const;
+	QModelIndex index( int row, int column,
+			const QModelIndex &parent = QModelIndex() ) const;
+	QModelIndex parent( const QModelIndex &index ) const;
+	int rowCount( const QModelIndex &parent = QModelIndex() ) const { return parent.isValid() ? 0 : Lines.size(); }
+	int columnCount( const QModelIndex &parent = QModelIndex() ) const { return parent.isValid() ? 0 : COLUMN_COUNT; }
+
+  protected slots:
+	void readMore();
+	void announceStarted();
+	void announceFinished( int, QProcess::ExitStatus );
+
+  protected:
+	void preloadFile();
+	void parseLine( const QString & );
+
+  protected:
+	enum eParseState {
+		NEW_BLOCK,
+		IN_BLOCK
+	} ParseState;
+	enum eColumnMap {
+		ColumnHash,
+		ColumnAuthor,
+		ColumnSummary,
+		ColumnLine,
+		ColumnData,
+		COLUMN_COUNT
+	};
+	QString File;
+
+	QProcess *gitBlame;
+
+	QList<TBlameLine> Lines;
+	QMap<QString,TCommitMeta*> Commits;
+	TCommitMeta *CurrentMeta;
+};
+
+//
 // Class:	TBlameWindow
 // Description:
 //
@@ -103,29 +172,10 @@ class TBlameWindow : public QWidget, public Ui::QBlame
 	TBlameWindow( const QString &, QWidget * = NULL );
 	~TBlameWindow();
 
-  protected slots:
-	void readMore();
-	void announceStarted();
-	void announceFinished( int, QProcess::ExitStatus );
-
   protected:
 	void showEvent( QShowEvent * );
 
-	void preloadFile();
-	void parseLine( const QString & );
-
-  protected:
-	enum eParseState {
-		NEW_BLOCK,
-		IN_BLOCK
-	} ParseState;
-	QString File;
-
-	QProcess *gitBlame;
-
-	QMap<unsigned int,TCommitMeta*> Lines;
-	QMap<QString,TCommitMeta*> Commits;
-	TCommitMeta *CurrentMeta;
+	TBlameModel *Model;
 };
 
 // -------------- Function prototypes

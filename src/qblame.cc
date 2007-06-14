@@ -23,6 +23,8 @@
 // --- Qt
 #include <QApplication>
 #include <QShowEvent>
+#include <QFile>
+#include <QHeaderView>
 // --- OS
 #include <signal.h>
 // --- Project libs
@@ -45,20 +47,14 @@
 // Description:
 //
 TBlameWindow::TBlameWindow( const QString &file, QWidget *p ) :
-	QWidget( p ),
-	ParseState( NEW_BLOCK ),
-	File( file )
+	QWidget( p )
 {
 	setupUi( this );
 
-	gitBlame = new QProcess( this );
-	connect( gitBlame, SIGNAL( readyRead() ),
-			this, SLOT( readMore() ) );
-	connect( gitBlame, SIGNAL( started() ),
-			this, SLOT( announceStarted() ) );
-	connect( gitBlame, SIGNAL( finished( int, QProcess::ExitStatus ) ),
-			this, SLOT( announceFinished( int, QProcess::ExitStatus ) ) );
+	Model = new TBlameModel( file, this );
 
+	listBlame->setRootIsDecorated(false);
+//	listBlame->header()->hide();
 }
 
 //
@@ -67,7 +63,7 @@ TBlameWindow::TBlameWindow( const QString &file, QWidget *p ) :
 //
 TBlameWindow::~TBlameWindow()
 {
-	delete gitBlame;
+	delete Model;
 }
 
 //
@@ -79,6 +75,47 @@ void TBlameWindow::showEvent( QShowEvent *event )
 	if( event->spontaneous() )
 		return;
 
+	Model->init();
+	listBlame->setModel( Model );
+}
+
+
+// --------------------------------------------
+
+//
+// Function:	TBlameModel :: TBlameModel
+// Description:
+//
+TBlameModel::TBlameModel( const QString &file, QWidget *p ) :
+	QAbstractItemModel( p ),
+	ParseState( NEW_BLOCK ),
+	File( file )
+{
+	gitBlame = new QProcess( this );
+	connect( gitBlame, SIGNAL( readyRead() ),
+			this, SLOT( readMore() ) );
+	connect( gitBlame, SIGNAL( started() ),
+			this, SLOT( announceStarted() ) );
+	connect( gitBlame, SIGNAL( finished( int, QProcess::ExitStatus ) ),
+			this, SLOT( announceFinished( int, QProcess::ExitStatus ) ) );
+
+}
+
+//
+// Function:	TBlameModel :: ~TBlameModel
+// Description:
+//
+TBlameModel::~TBlameModel()
+{
+	delete gitBlame;
+}
+
+//
+// Function:	TBlameModel :: showEvent
+// Description:
+//
+void TBlameModel::init()
+{
 	preloadFile();
 
 	gitBlame->start( "git-blame", QStringList()
@@ -88,23 +125,44 @@ void TBlameWindow::showEvent( QShowEvent *event )
 }
 
 //
-// Function:	TBlameWindow :: preloadFile
+// Function:	TBlameModel :: preloadFile
 // Description:
 //
-void TBlameWindow::preloadFile()
+void TBlameModel::preloadFile()
 {
+	// File handle
+	QFile fh( File );
+	fh.open( QIODevice::ReadOnly );
+
+	QByteArray ba;
+
+	while( !fh.atEnd() ) {
+		ba = fh.readLine();
+
+		Lines.append( TBlameLine() );
+		Lines.last().data = ba;
+		Lines.last().Commit = NULL;
+
+		// Remove the newline
+		Lines.last().data.chop(1);
+	}
+
+	cerr << "LOAD: Read " << Lines.size() << " lines" << endl;
 }
 
 //
-// Function:	TBlameWindow :: readMore
+// Function:	TBlameModel :: readMore
 // Description:
 //
-void TBlameWindow::readMore()
+void TBlameModel::readMore()
 {
 	QByteArray ba;
 	QString x;
 
 	do {
+		if( !gitBlame->canReadLine() )
+			break;
+
 		ba = gitBlame->readLine();
 		x = ba;
 
@@ -116,16 +174,18 @@ void TBlameWindow::readMore()
 }
 
 //
-// Function:	TBlameWindow :: parseLine
+// Function:	TBlameModel :: parseLine
 // Description:
 //
-void TBlameWindow::parseLine( const QString &line )
+void TBlameModel::parseLine( const QString &line )
 {
 	QStringList Field = line.split( ' ' );
 
 	unsigned int SourceLine, ResultLine, NumLines;
 	QString Hash;
 	QString Key, Value;
+	QModelIndex begin;
+	QModelIndex end;
 
 	switch( ParseState ) {
 		case NEW_BLOCK:
@@ -153,10 +213,14 @@ void TBlameWindow::parseLine( const QString &line )
 			// overwrite a previous value because this is an incremental
 			// blame and gets more and more accurate
 			for( unsigned int i = 0; i < NumLines; i++ ) {
-				Lines[ResultLine + i] = CurrentMeta;
+				Lines[ResultLine + i - 1].Commit = CurrentMeta;
+				Lines[ResultLine + i - 1].SourceLine = SourceLine + i;
 			}
 
-			cerr << "New block: " << qPrintable(CurrentMeta->Hash) << endl;
+			// Tell the world that the hash has changed
+			begin = createIndex(ResultLine-1,ColumnHash);
+			end = createIndex(ResultLine+NumLines-1,COLUMN_COUNT-1);
+			emit dataChanged( begin, end );
 
 			ParseState = IN_BLOCK;
 			break;
@@ -194,7 +258,9 @@ void TBlameWindow::parseLine( const QString &line )
 				CurrentMeta = NULL;
 				ParseState = NEW_BLOCK;
 			} else {
-				cerr << "Unknown key in blame block: "
+				cerr << "Unknown key in blame block "
+					<< qPrintable(CurrentMeta->Hash)
+					<< ": "
 					<< qPrintable(Key) << " = " 
 					<< qPrintable(Value) << endl;
 			}
@@ -204,25 +270,109 @@ void TBlameWindow::parseLine( const QString &line )
 }
 
 //
-// Function:	TBlameWindow :: announceStarted
+// Function:	TBlameModel :: announceStarted
 // Description:
 //
-void TBlameWindow::announceStarted()
+void TBlameModel::announceStarted()
 {
 	cerr << "PROCESS: Started " << gitBlame->pid() << endl;
 }
 
 //
-// Function:	TBlameWindow :: announceFinished
+// Function:	TBlameModel :: announceFinished
 // Description:
 //
-void TBlameWindow::announceFinished( int ExitCode, QProcess::ExitStatus )
+void TBlameModel::announceFinished( int ExitCode, QProcess::ExitStatus )
 {
 	cerr << "PROCESS: Finished with exit code " << ExitCode << endl;
 
-	foreach( TCommitMeta *Meta, Lines ) {
-		cerr << qPrintable( Meta->Hash ) << " " << qPrintable( Meta->Summary ) << endl;
+//	foreach( const TBlameLine &L, Lines ) {
+//		cerr << qPrintable( L.Commit->Hash ) << " " << qPrintable( L.Commit->Summary ) << endl;
+//	}
+}
+
+//
+// Function:	TBlameModel :: announceFinished
+// Description:
+//
+QVariant TBlameModel::data( const QModelIndex &index, int role ) const
+{
+	if (!index.isValid())
+		return QVariant();
+
+	const TBlameLine *L = &Lines[index.row()];
+
+	switch( role ) {
+		// --- General Purpose Roles
+		case Qt::DisplayRole:
+		case Qt::ToolTipRole:
+			switch( index.column() ) {
+				case ColumnHash:
+					return L->Commit ? L->Commit->Hash : QVariant();
+				case ColumnAuthor:
+					return L->Commit ? L->Commit->Author.Name : QVariant();
+				case ColumnSummary:
+					return L->Commit ? L->Commit->Summary : QVariant();
+				case ColumnLine:
+					return index.row()+1;
+				case ColumnData:
+					return L->data;
+			}
+
+			break;
+		case Qt::DecorationRole:
+		case Qt::EditRole:
+		case Qt::StatusTipRole:
+		case Qt::WhatsThisRole:
+		case Qt::SizeHintRole:
+			break;
+
+		// --- Appearance Roles
+		case Qt::FontRole:
+			switch( index.column() ) {
+				case ColumnData: {
+					QFont f;
+					f.setFamily("Monospace");
+					return f;
+				}
+				default:
+					break;
+			}
+		case Qt::TextAlignmentRole:
+		case Qt::BackgroundRole:
+			break;
+		case Qt::ForegroundRole:
+			break;
+		case Qt::CheckStateRole:
+			break;
+
+		// --- Everything else
+		default:
+			break;
 	}
+	return QVariant();
+}
+
+//
+// Function:	TBlameModel :: index
+// Description:
+//
+QModelIndex TBlameModel::index( int row, int column, const QModelIndex &parent ) const
+{
+	if( parent != QModelIndex() )
+		return QModelIndex();
+
+	return createIndex( row, column );
+}
+
+//
+// Function:	TBlameModel :: parent
+// Description:
+//
+QModelIndex TBlameModel::parent( const QModelIndex &index ) const
+{
+	// There is only one parent
+	return QModelIndex();
 }
 
 
