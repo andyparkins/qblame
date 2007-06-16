@@ -28,6 +28,21 @@ SOURCES += qblame.cc
 # --- Dependencies
 PRE_TARGETDEPS += tags
 
+# --- Output
+DESTDIR = ../bin
+BUILD_DIR = ../build
+UI_DIR = $$BUILD_DIR
+MOC_DIR = $$BUILD_DIR
+RCC_DIR = $$BUILD_DIR
+OBJECTS_DIR = $$BUILD_DIR
+
+#TARGET=qblame
+#CONFIG(debug, debug|release) {
+#	DEFINES += DEBUG
+#	TARGET = $$join(TARGET,,,-dbg)
+#}
+#message(TARGET is $$TARGET)
+
 
 # -------------- Extras
 # --- Custom make recipes
