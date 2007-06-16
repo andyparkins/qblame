@@ -52,9 +52,6 @@ TBlameWindow::TBlameWindow( const QString &file, QWidget *p ) :
 	setupUi( this );
 
 	Model = new TBlameModel( file, this );
-
-	listBlame->setRootIsDecorated(false);
-//	listBlame->header()->hide();
 }
 
 //
@@ -77,6 +74,9 @@ void TBlameWindow::showEvent( QShowEvent *event )
 
 	Model->init();
 	listBlame->setModel( Model );
+	listBlame->setRootIndex( Model->index( TBlameModel::RowFile, 0 ) );
+	listHistory->setModel( Model );
+	listHistory->setRootIndex( Model->index( TBlameModel::RowHistory, 0 ) );
 }
 
 
@@ -147,6 +147,9 @@ void TBlameModel::preloadFile()
 		Lines.last().data.chop(1);
 	}
 
+	beginInsertRows( createIndex(RowFile,0,FileRoot), 0, Lines.size()-1 );
+	endInsertRows();
+
 	cerr << "LOAD: Read " << Lines.size() << " lines" << endl;
 }
 
@@ -204,6 +207,17 @@ void TBlameModel::parseLine( const QString &line )
 				CurrentMeta->Hash = Field[0];
 				// Create a new record for this commit
 				Commits[Hash] = CurrentMeta;
+
+				// Assume that the commits appear in reverse
+				// chronological order from git-blame.  git-blame is
+				// working backwards through the file, so it's not an
+				// unreasonable assumption.  (However it is more than
+				// likely an incorrect assumption, because their could
+				// be multiple branches)
+				begin = createIndex( RowHistory, 0, HistoryRoot );
+				beginInsertRows( begin, History.size(), History.size() );
+				History.append( CurrentMeta );
+				endInsertRows();
 			} else {
 				CurrentMeta = Commits[Hash];
 			}
@@ -217,9 +231,10 @@ void TBlameModel::parseLine( const QString &line )
 				Lines[ResultLine + i - 1].SourceLine = SourceLine + i;
 			}
 
-			// Tell the world that the hash has changed
-			begin = createIndex(ResultLine-1,ColumnHash);
-			end = createIndex(ResultLine+NumLines-1,COLUMN_COUNT-1);
+			// Tell the world that the line has changed (from the hash
+			// to the line number - no need to change the file line)
+			begin = createIndex(ResultLine-1,ColumnHash,FileIndex);
+			end = createIndex(ResultLine+NumLines-1,ColumnLine,FileIndex);
 			emit dataChanged( begin, end );
 
 			ParseState = IN_BLOCK;
@@ -292,14 +307,106 @@ void TBlameModel::announceFinished( int ExitCode, QProcess::ExitStatus )
 }
 
 //
-// Function:	TBlameModel :: announceFinished
+// Function:	TBlameModel :: data
 // Description:
 //
 QVariant TBlameModel::data( const QModelIndex &index, int role ) const
 {
-	if (!index.isValid())
+	if( !index.isValid() )
 		return QVariant();
 
+	switch( index.internalId() ) {
+		case FileRoot:
+			return dataFileRoot( index, role );
+		case HistoryRoot:
+			return dataHistoryRoot( index, role );
+		case FileIndex:
+			return dataFileIndex( index, role );
+		case HistoryIndex:
+			return dataHistoryIndex( index, role );
+	}
+
+	return QVariant();
+}
+
+//
+// Function:	TBlameModel :: dataFileRoot
+// Description:
+//
+QVariant TBlameModel::dataFileRoot( const QModelIndex &, int role ) const
+{
+	switch( role ) {
+		// --- General Purpose Roles
+		case Qt::DisplayRole:
+		case Qt::ToolTipRole:
+			return "File Blame";
+
+		case Qt::DecorationRole:
+		case Qt::EditRole:
+		case Qt::StatusTipRole:
+		case Qt::WhatsThisRole:
+		case Qt::SizeHintRole:
+			break;
+
+		// --- Appearance Roles
+		case Qt::FontRole:
+		case Qt::TextAlignmentRole:
+		case Qt::BackgroundRole:
+			break;
+		case Qt::ForegroundRole:
+			break;
+		case Qt::CheckStateRole:
+			break;
+
+		// --- Everything else
+		default:
+			break;
+	}
+	return QVariant();
+}
+
+//
+// Function:	TBlameModel :: dataHistoryRoot
+// Description:
+//
+QVariant TBlameModel::dataHistoryRoot( const QModelIndex &, int role ) const
+{
+	switch( role ) {
+		// --- General Purpose Roles
+		case Qt::DisplayRole:
+		case Qt::ToolTipRole:
+			return "History";
+
+		case Qt::DecorationRole:
+		case Qt::EditRole:
+		case Qt::StatusTipRole:
+		case Qt::WhatsThisRole:
+		case Qt::SizeHintRole:
+			break;
+
+		// --- Appearance Roles
+		case Qt::FontRole:
+		case Qt::TextAlignmentRole:
+		case Qt::BackgroundRole:
+			break;
+		case Qt::ForegroundRole:
+			break;
+		case Qt::CheckStateRole:
+			break;
+
+		// --- Everything else
+		default:
+			break;
+	}
+	return QVariant();
+}
+
+//
+// Function:	TBlameModel :: dataFileIndex
+// Description:
+//
+QVariant TBlameModel::dataFileIndex( const QModelIndex &index, int role ) const
+{
 	const TBlameLine *L = &Lines[index.row()];
 
 	switch( role ) {
@@ -354,15 +461,87 @@ QVariant TBlameModel::data( const QModelIndex &index, int role ) const
 }
 
 //
+// Function:	TBlameModel :: dataHistoryIndex
+// Description:
+//
+QVariant TBlameModel::dataHistoryIndex( const QModelIndex &index, int role ) const
+{
+	const TCommitMeta *M = History[index.row()];
+
+	switch( role ) {
+		// --- General Purpose Roles
+		case Qt::DisplayRole:
+		case Qt::ToolTipRole:
+			switch( index.column() ) {
+				case HColumnHash:
+					return M ? M->Hash : QVariant();
+				case HColumnAuthor:
+					return M ? M->Author.Name : QVariant();
+				case HColumnSummary:
+					return M ? M->Summary : QVariant();
+				case HColumnID:
+					return index.row()+1;
+			}
+
+			break;
+		case Qt::DecorationRole:
+		case Qt::EditRole:
+		case Qt::StatusTipRole:
+		case Qt::WhatsThisRole:
+		case Qt::SizeHintRole:
+			break;
+
+		// --- Appearance Roles
+		case Qt::FontRole:
+		case Qt::TextAlignmentRole:
+		case Qt::BackgroundRole:
+			break;
+		case Qt::ForegroundRole:
+			break;
+		case Qt::CheckStateRole:
+			break;
+
+		// --- Everything else
+		default:
+			break;
+	}
+	return QVariant();
+}
+
+//
 // Function:	TBlameModel :: index
 // Description:
 //
 QModelIndex TBlameModel::index( int row, int column, const QModelIndex &parent ) const
 {
-	if( parent != QModelIndex() )
-		return QModelIndex();
+	if( !parent.isValid() ) {
+		// When the parent is invalid, then we know that the requested
+		// node is one of the two root nodes, return an index with an
+		// appropriate ID to indicate the root type
+		switch( row ) {
+			case RowFile:
+				return createIndex( row, column, FileRoot );
+			case RowHistory:
+				return createIndex( row, column, HistoryRoot );
+		}
+	} else {
+		// When the parent is not invalid, we look up it's type from the
+		// node internalId
+		switch( parent.internalId() ) {
+			case FileRoot:
+				return createIndex( row, column, FileIndex );
+			case HistoryRoot:
+				return createIndex( row, column, HistoryIndex );
+			case FileIndex:
+			case HistoryIndex:
+				// Neither of the ordinary node types have any children,
+				// so we return an invalid index
+				return QModelIndex();
+		}
+	}
 
-	return createIndex( row, column );
+	// Never gets here
+	return QModelIndex();
 }
 
 //
@@ -371,10 +550,70 @@ QModelIndex TBlameModel::index( int row, int column, const QModelIndex &parent )
 //
 QModelIndex TBlameModel::parent( const QModelIndex &index ) const
 {
-	// There is only one parent
+	// Invalid nodes have no parent
+	if( !index.isValid() )
+		return QModelIndex();
+
+	switch( index.internalId() ) {
+		case FileRoot:
+			return QModelIndex();
+		case HistoryRoot:
+			return QModelIndex();
+		case FileIndex:
+			return createIndex( RowFile, 0, FileRoot );
+		case HistoryIndex:
+			return createIndex( RowHistory, 0, HistoryRoot );
+	}
+
+	// Should never get here
 	return QModelIndex();
 }
 
+//
+// Function:	TBlameModel :: rowCount
+// Description:
+//
+int TBlameModel::rowCount( const QModelIndex &parent ) const
+{
+	if( !parent.isValid() )
+		return ROOT_TYPE_COUNT;
+
+	switch( parent.internalId() ) {
+		case FileRoot:
+			return Lines.size();
+		case HistoryRoot:
+			return History.size();
+		case FileIndex:
+		case HistoryIndex:
+			return 0;
+	}
+
+	// Never gets here
+	return 0;
+}
+
+//
+// Function:	TBlameModel :: columnCount
+// Description:
+//
+int TBlameModel::columnCount( const QModelIndex &parent ) const
+{
+	if( !parent.isValid() )
+		return 1;
+
+	switch( parent.internalId() ) {
+		case FileRoot:
+			return FILE_COLUMN_COUNT;
+		case HistoryRoot:
+			return HISTORY_COLUMN_COUNT;
+		case FileIndex:
+		case HistoryIndex:
+			return 0;
+	}
+
+	// Never gets here
+	return 0;
+}
 
 // -------------- Function Declarations
 void signalHandler( int );

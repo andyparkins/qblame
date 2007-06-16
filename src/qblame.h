@@ -113,6 +113,20 @@ class TBlameModel : public QAbstractItemModel
   Q_OBJECT
 
   public:
+	enum {
+		RowFile,
+		RowHistory,
+		ROOT_TYPE_COUNT
+	};
+	enum {
+		FileRoot,
+		HistoryRoot,
+		FileIndex,
+		HistoryIndex,
+		NODE_TYPE_INVALID
+	};
+
+  public:
 	TBlameModel( const QString &, QWidget * = NULL );
 	~TBlameModel();
 
@@ -120,14 +134,18 @@ class TBlameModel : public QAbstractItemModel
 
 	// --- QAbstractItemModel overrides
 	QVariant data( const QModelIndex &index, int role ) const;
+	QVariant dataFileRoot( const QModelIndex &index, int role ) const;
+	QVariant dataHistoryRoot( const QModelIndex &index, int role ) const;
+	QVariant dataFileIndex( const QModelIndex &index, int role ) const;
+	QVariant dataHistoryIndex( const QModelIndex &index, int role ) const;
 //	Qt::ItemFlags flags( const QModelIndex &index ) const;
 //	QVariant headerData( int section, Qt::Orientation orientation,
 //			int role = Qt::DisplayRole ) const;
 	QModelIndex index( int row, int column,
 			const QModelIndex &parent = QModelIndex() ) const;
 	QModelIndex parent( const QModelIndex &index ) const;
-	int rowCount( const QModelIndex &parent = QModelIndex() ) const { return parent.isValid() ? 0 : Lines.size(); }
-	int columnCount( const QModelIndex &parent = QModelIndex() ) const { return parent.isValid() ? 0 : COLUMN_COUNT; }
+	int rowCount( const QModelIndex &parent = QModelIndex() ) const;
+	int columnCount( const QModelIndex &parent = QModelIndex() ) const;
 
   protected slots:
 	void readMore();
@@ -143,13 +161,20 @@ class TBlameModel : public QAbstractItemModel
 		NEW_BLOCK,
 		IN_BLOCK
 	} ParseState;
-	enum eColumnMap {
+	enum eFileColumnMap {
 		ColumnHash,
 		ColumnAuthor,
 		ColumnSummary,
 		ColumnLine,
 		ColumnData,
-		COLUMN_COUNT
+		FILE_COLUMN_COUNT
+	};
+	enum eHistoryColumnMap {
+		HColumnID,
+		HColumnHash,
+		HColumnAuthor,
+		HColumnSummary,
+		HISTORY_COLUMN_COUNT
 	};
 	QString File;
 
@@ -158,6 +183,7 @@ class TBlameModel : public QAbstractItemModel
 	QList<TBlameLine> Lines;
 	QMap<QString,TCommitMeta*> Commits;
 	TCommitMeta *CurrentMeta;
+	QList<TCommitMeta *> History;
 };
 
 //

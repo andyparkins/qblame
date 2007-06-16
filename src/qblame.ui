@@ -5,8 +5,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>630</width>
-    <height>473</height>
+    <width>1016</width>
+    <height>789</height>
    </rect>
   </property>
   <property name="windowTitle" >
@@ -20,7 +20,21 @@
     <number>6</number>
    </property>
    <item>
-    <widget class="QTreeView" name="listBlame" />
+    <widget class="QSplitter" name="splitter" >
+     <property name="orientation" >
+      <enum>Qt::Vertical</enum>
+     </property>
+     <widget class="QTreeView" name="listHistory" >
+      <property name="rootIsDecorated" >
+       <bool>false</bool>
+      </property>
+     </widget>
+     <widget class="QTreeView" name="listBlame" >
+      <property name="rootIsDecorated" >
+       <bool>false</bool>
+      </property>
+     </widget>
+    </widget>
    </item>
   </layout>
  </widget>
