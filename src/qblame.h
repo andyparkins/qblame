@@ -84,12 +84,15 @@ class TEvent
 class TCommitMeta
 {
   public:
+	TCommitMeta() : Boundary(false) {}
+
 	QString Hash;
 	TEvent Author;
 	TEvent Committer;
 	QString Summary;
 	QString Filename;
 	bool Boundary;
+	QList<TCommitMeta *> Parent;
 };
 
 //
@@ -183,6 +186,7 @@ class TBlameModel : public QAbstractItemModel
 	QList<TBlameLine> Lines;
 	QMap<QString,TCommitMeta*> Commits;
 	TCommitMeta *CurrentMeta;
+	TCommitMeta *OldMeta;
 	QList<TCommitMeta *> History;
 };
 

@@ -89,7 +89,9 @@ void TBlameWindow::showEvent( QShowEvent *event )
 TBlameModel::TBlameModel( const QString &file, QWidget *p ) :
 	QAbstractItemModel( p ),
 	ParseState( NEW_BLOCK ),
-	File( file )
+	File( file ),
+	CurrentMeta( NULL ),
+	OldMeta( NULL )
 {
 	gitBlame = new QProcess( this );
 	connect( gitBlame, SIGNAL( readyRead() ),
@@ -205,6 +207,29 @@ void TBlameModel::parseLine( const QString &line )
 			NumLines = Field[3].toUInt();
 
 			if( !Commits.contains( Hash ) ) {
+				// Either
+				//  a) This is very first time we are here, CurrentMeta and
+				//     OldMeta will both be NULL, nothing to do
+				//  b) We are starting the second commit in a chain,
+				//     CurrentMeta points at the top of the chain and OldMeta
+				//     is NULL, we point OldMeta at CurrentMeta
+				//  c) We are starting the third or greater commits in a
+				//     chain, CurrentMeta and OldMeta are both non-NULL, and
+				//     we conclude that OldMeta is the child of CurrentMeta
+				if( OldMeta )
+					OldMeta->Parent.append( CurrentMeta );
+				if( CurrentMeta && !CurrentMeta->Boundary ) {
+					OldMeta = CurrentMeta;
+				} else {
+					// If CurrentMeta is a boundary commit, then
+					// the commit that follows this one is not our
+					// OldMeta's parent, therefore we set OldMeta to
+					// NULL to indicate that
+					OldMeta = NULL;
+				}
+
+				// Move on to creating the next CurrentMeta
+
 				CurrentMeta = new TCommitMeta;
 				CurrentMeta->Hash = Field[0];
 				// Create a new record for this commit
