@@ -167,7 +167,7 @@ void TBlameModel::readMore()
 			break;
 
 		ba = gitBlame->readLine();
-		x = ba;
+		x = QString::fromUtf8( ba.data(), ba.size() );
 
 		// There is always a newline at the end, so remove it
 		x.chop(1);
