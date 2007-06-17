@@ -120,6 +120,8 @@ void TBlameModel::init()
 
 	gitBlame->start( "git-blame", QStringList()
 			<< "--incremental"
+			<< "-C"
+			<< "-C"
 			<< File
 			);
 }
